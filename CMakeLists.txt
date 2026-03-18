@@ -44,6 +44,8 @@ set(SOURCES
     src/agent/tools/MoveFilesTool.cpp
     src/agent/tools/ShellTool.cpp
     src/agent/tools/WebSearchTool.cpp
+    src/agent/AgentOrchestrator.cpp
+    src/agent/CacheManager.cpp
     src/service/FileOperationService.cpp
 )
 
@@ -65,6 +67,8 @@ add_executable(FileSearch ${SOURCES}
     src/agent/ChatBridge.h
     src/agent/ToolExecutor.h
     src/agent/ContextBuilder.h
+    src/agent/AgentOrchestrator.h
+    src/agent/CacheManager.h
     src/service/FileOperationService.h
 )
 

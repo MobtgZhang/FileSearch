@@ -8,10 +8,17 @@ Rectangle {
     id: searchBar
     Layout.fillWidth: true
     Layout.preferredHeight: Theme.searchBarHeight
-    clip: false  // 允许 Pop 菜单溢出显示
+    clip: false
     color: Theme.panel
     border.color: Theme.border
     border.width: 1
+
+    property string lastQueryText: ""
+
+    function requery() {
+        if (typeof searchEngine !== "undefined" && searchEngine)
+            searchEngine.query(lastQueryText)
+    }
 
     FolderDialog {
         id: folderDialog
@@ -45,7 +52,6 @@ Rectangle {
             color: Theme.accent
         }
 
-        // 搜索框：左侧输入 + 右侧当前搜索目录
         Rectangle {
             Layout.fillWidth: true
             Layout.minimumWidth: 200
@@ -82,6 +88,7 @@ Rectangle {
                     leftPadding: 4
                     rightPadding: 4
                     onTextChanged: {
+                        searchBar.lastQueryText = text
                         if (typeof searchEngine !== "undefined" && searchEngine)
                             searchEngine.query(text)
                     }
@@ -146,7 +153,6 @@ Rectangle {
             }
         }
 
-        // 筛选 Pop 菜单：查找目录、类型、大小、最近 XX 天
         Row {
             spacing: 8
             Layout.alignment: Qt.AlignVCenter
@@ -185,27 +191,34 @@ Rectangle {
             }
 
             FilterPopMenu {
+                id: typeFilterMenu
                 label: "类型"
                 chipColor: Theme.accent2
-                model: ["全部", "视频", "文档", "图片", "音频", "压缩包", "可执行文件"]
-                currentIndex: 1
-                onSelected: function(idx) { /* 更新类型筛选 */ }
+                model: ["全部", "文件夹", "视频", "文档", "图片", "音频", "压缩包", "可执行文件"]
+                currentIndex: 0
+                onSelected: function(idx) {
+                    var types = ["全部", "文件夹", "视频", "文档", "图片", "音频", "压缩包", "可执行文件"]
+                    if (typeof searchEngine !== "undefined" && searchEngine) {
+                        searchEngine.setTypeFilter(types[idx])
+                        searchBar.requery()
+                    }
+                }
             }
 
             FilterPopMenu {
                 label: "大小"
                 chipColor: Theme.accent3
                 model: ["全部", "> 100 MB", "> 500 MB", "> 1 GB", "> 10 GB", "< 1 MB"]
-                currentIndex: 2
-                onSelected: function(idx) { /* 更新大小筛选 */ }
+                currentIndex: 0
+                onSelected: function(idx) { /* TODO: wire up size filter */ }
             }
 
             FilterPopMenu {
                 label: "最近"
                 chipColor: Theme.accent4
                 model: ["全部", "7 天", "30 天", "90 天", "1 年"]
-                currentIndex: 3
-                onSelected: function(idx) { /* 更新时间筛选 */ }
+                currentIndex: 0
+                onSelected: function(idx) { /* TODO: wire up date filter */ }
             }
         }
     }

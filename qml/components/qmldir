@@ -11,6 +11,7 @@ FilelightDiskView 1.0 FilelightDiskView.qml
 FilelightPage 1.0 FilelightPage.qml
 DuplicateFilePage 1.0 DuplicateFilePage.qml
 FileCleanupPage 1.0 FileCleanupPage.qml
+SystemCleanupPage 1.0 SystemCleanupPage.qml
 FavoritesPage 1.0 FavoritesPage.qml
 HistoryPage 1.0 HistoryPage.qml
 FilelightSegmentShape 1.0 FilelightSegmentShape.qml

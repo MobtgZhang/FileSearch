@@ -37,6 +37,9 @@ ApplicationWindow {
         target: (typeof chatBridge !== "undefined" && chatBridge) ? chatBridge : null
         function onUserMessageAdded(text) { ChatHistoryContext.addUserMessage(text) }
         function onAiMessageAdded(text) { ChatHistoryContext.addAiMessage(text) }
+        function onToolExecutionAdded(name, status, result) {
+            ChatHistoryContext.addToolExecution(name, status, result)
+        }
     }
 
     Connections {
@@ -115,9 +118,8 @@ ApplicationWindow {
                         anchors.fill: parent
                         currentIndex: AppController.currentPage === "search" ? 0
                                   : (AppController.currentPage === "disk" ? 1
-                                  : (AppController.currentPage === "duplicate" ? 2
-                                  : (AppController.currentPage === "cleanup" ? 3
-                                  : (AppController.currentPage === "favorites" ? 4 : 5))))
+                                  : (AppController.currentPage === "cleanup" ? 2
+                                  : (AppController.currentPage === "favorites" ? 3 : 4)))
 
                         // 搜索页：可视化面板 + 文件列表
                         SplitView {
@@ -152,20 +154,14 @@ ApplicationWindow {
                             }
                         }
 
-                        // 磁盘可视化页：Filelight 风格环形树状图（与搜索页完全不同）
+                        // 磁盘可视化页：Filelight 风格环形树状图
                         FilelightPage {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                         }
 
-                        // 重复文件扫描页
-                        DuplicateFilePage {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                        }
-
-                        // 文件清理页
-                        FileCleanupPage {
+                        // 系统清理页：垃圾清理 + 重复文件（合并）
+                        SystemCleanupPage {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                         }

@@ -4,7 +4,6 @@ import QtQuick.Layouts 1.15
 import QtQuick.Dialogs
 import "../theme" 1.0
 
-// Filelight 风格磁盘可视化独立页面：环形树状图 + 目录选择
 Rectangle {
     id: filelightPage
     color: Theme.panel
@@ -32,7 +31,6 @@ Rectangle {
             var path = AppController.resolveSearchPath()
             if (path.length > 0) {
                 AppController.isScanning = true
-                // 使用 Qt.callLater 确保 UI 先更新，避免点击时卡顿
                 Qt.callLater(function() {
                     if (AppController.isScanning)
                         scanEngine.scan(path)
@@ -52,7 +50,6 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // 顶部：标题 + 目录选择
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 72
@@ -79,6 +76,60 @@ Rectangle {
                     }
 
                     Item { Layout.fillWidth: true }
+
+                    Button {
+                        text: "−"
+                        font.pixelSize: 14
+                        font.family: Theme.fontFamily
+                        implicitHeight: 24
+                        implicitWidth: 28
+                        ToolTip.visible: hovered
+                        ToolTip.text: "减少层级"
+                        background: Rectangle {
+                            color: parent.pressed ? Qt.darker(Theme.surface, 1.1) : (parent.hovered ? Qt.lighter(Theme.surface, 1.05) : Theme.surface)
+                            radius: 4
+                            border.color: Theme.border
+                        }
+                        contentItem: Text {
+                            text: parent.text; font: parent.font; color: Theme.text
+                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (diskView.visibleDepth > 1)
+                                diskView.visibleDepth--
+                        }
+                    }
+
+                    Text {
+                        font.pixelSize: 10
+                        font.family: Theme.fontFamily
+                        color: Theme.muted
+                        text: diskView.visibleDepth + " 层"
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Button {
+                        text: "+"
+                        font.pixelSize: 14
+                        font.family: Theme.fontFamily
+                        implicitHeight: 24
+                        implicitWidth: 28
+                        ToolTip.visible: hovered
+                        ToolTip.text: "增加层级"
+                        background: Rectangle {
+                            color: parent.pressed ? Qt.darker(Theme.surface, 1.1) : (parent.hovered ? Qt.lighter(Theme.surface, 1.05) : Theme.surface)
+                            radius: 4
+                            border.color: Theme.border
+                        }
+                        contentItem: Text {
+                            text: parent.text; font: parent.font; color: Theme.text
+                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (diskView.visibleDepth < 8)
+                                diskView.visibleDepth++
+                        }
+                    }
                 }
 
                 RowLayout {
@@ -129,11 +180,11 @@ Rectangle {
 
                     Button {
                         visible: diskView && diskView.focusedPath.length > 0
-                        text: "返回上级"
+                        text: "返回根目录"
                         font.pixelSize: 11
                         font.family: Theme.fontFamily
                         implicitHeight: 28
-                        implicitWidth: 72
+                        implicitWidth: 80
                         background: Rectangle {
                             color: parent.pressed ? Qt.darker(Theme.surface, 1.1) : (parent.hovered ? Qt.lighter(Theme.surface, 1.05) : Theme.surface)
                             radius: 6
@@ -177,11 +228,69 @@ Rectangle {
             }
         }
 
-        // 环形树状图（占满剩余空间）
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: breadcrumbRow.implicitHeight + 12
+            color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0.3)
+            border.color: Theme.border
+            border.width: 1
+            visible: diskView.focusedPath.length > 0
+
+            RowLayout {
+                id: breadcrumbRow
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 4
+
+                Text {
+                    font.pixelSize: 10
+                    font.family: Theme.fontFamily
+                    color: Theme.accent
+                    text: "/"
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: diskView.focusedPath = ""
+                    }
+                }
+
+                Repeater {
+                    model: diskView.focusedPath ? diskView.focusedPath.split("/").filter(function(s) { return s.length > 0 }) : []
+
+                    RowLayout {
+                        spacing: 4
+                        Text {
+                            font.pixelSize: 10
+                            font.family: Theme.fontFamily
+                            color: Theme.muted
+                            text: ">"
+                        }
+                        Text {
+                            font.pixelSize: 10
+                            font.family: Theme.fontFamily
+                            color: index === (diskView.focusedPath.split("/").filter(function(s) { return s.length > 0 }).length - 1) ? Theme.text : Theme.accent
+                            text: modelData
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var parts = diskView.focusedPath.split("/").filter(function(s) { return s.length > 0 })
+                                    var newPath = "/" + parts.slice(0, index + 1).join("/")
+                                    diskView.focusedPath = newPath
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 20
+            Layout.margins: 8
 
             FilelightDiskView {
                 id: diskView
@@ -192,7 +301,6 @@ Rectangle {
             }
         }
 
-        // 底部状态
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 36
@@ -209,7 +317,11 @@ Rectangle {
                     font.pixelSize: 10
                     font.family: Theme.fontFamily
                     color: Theme.muted
-                    text: diskView.focusedPath ? "当前: " + diskView.focusedPath.replace(/^.*\//, "") + " · 点击中心圆返回上级" : "提示：点击扇区可聚焦 · 点击中心圆返回上级 · 悬停查看详情"
+                    text: {
+                        if (diskView.focusedPath)
+                            return "当前: " + diskView.focusedPath.replace(/^.*\//, "") + " · 点击扇区聚焦子目录 · 点击中心返回上级"
+                        return "点击扇区聚焦子目录 · 点击中心返回上级 · +/− 调节显示层级"
+                    }
                 }
 
                 Item { Layout.fillWidth: true }

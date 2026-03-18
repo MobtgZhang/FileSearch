@@ -67,7 +67,7 @@ QtObject {
     readonly property int searchBarHeight: 60
     readonly property int sidebarWidth: 48
     readonly property int vizPanelWidth: 320
-    readonly property int aiPanelWidth: 280
+    readonly property int aiPanelWidth: 380
     readonly property int statusBarHeight: 40
     readonly property int actionBarHeight: 44
     readonly property int fileRowHeight: 32

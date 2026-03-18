@@ -22,6 +22,11 @@ Rectangle {
         )
     }
 
+    function pushJsCall(jsCode) {
+        var wv = webLoader.item && webLoader.item.children && webLoader.item.children[0]
+        if (wv) wv.runJavaScript(jsCode)
+    }
+
     Connections {
         target: (typeof appSettings !== "undefined" && appSettings) ? appSettings : null
         function onThemeModeChanged() { aiPanel.applyThemeToWeb() }
@@ -38,6 +43,7 @@ Rectangle {
                 QtObject {
                     id: channelBridge
                     WebChannel.id: "chatBridge"
+
                     function addUserMessage(text) {
                         if (typeof chatBridge !== "undefined" && chatBridge)
                             chatBridge.addUserMessage(text)
@@ -50,7 +56,14 @@ Rectangle {
                         if (typeof chatBridge !== "undefined" && chatBridge)
                             chatBridge.addToolExecution(name, status, result)
                     }
+                    function setModelName(model) {
+                        if (typeof chatBridge !== "undefined" && chatBridge)
+                            chatBridge.setModelName(model)
+                    }
+
+                    property bool aiThinking: (typeof chatBridge !== "undefined" && chatBridge) ? chatBridge.aiThinking : false
                 }
+
                 WebEngineView {
                     id: webView
                     anchors.fill: parent
@@ -65,12 +78,11 @@ Rectangle {
                         worldId: WebEngineScript.MainWorld
                     }]
                     onLoadProgressChanged: function(progress) {
-                    if (progress === 100) {
-                        aiPanel.applyThemeToWeb()
-                        // 延迟再执行一次，确保 DOM 完全就绪（解决首次打开主题不同步）
-                        themeSyncTimer.restart()
+                        if (progress === 100) {
+                            aiPanel.applyThemeToWeb()
+                            themeSyncTimer.restart()
+                        }
                     }
-                }
                 }
             }
         }
@@ -83,7 +95,6 @@ Rectangle {
         onTriggered: aiPanel.applyThemeToWeb()
     }
 
-    // 当无法加载 HTML 时的占位提示
     Rectangle {
         anchors.fill: parent
         visible: !webLoader.active

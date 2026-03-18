@@ -16,7 +16,7 @@ public:
 
     explicit DuplicateWorker(QObject *parent = nullptr);
 
-    void scan(const QString &path, int hashAlgo, int fileTypeFilter, qint64 minSizeBytes);
+    Q_INVOKABLE void scan(const QString &path, int hashAlgo, int fileTypeFilter, qint64 minSizeBytes);
     void cancel();
 
 signals:

@@ -36,8 +36,10 @@ Rectangle {
         if (typeof scanEngine !== "undefined" && scanEngine) {
             var path = AppController.resolveSearchPath()
             if (path.length > 0) {
+                vizPanel.categories = []
+                vizPanel.usedSize = 0
+                vizPanel.totalSize = 0
                 AppController.isScanning = true
-                // 使用 Qt.callLater 确保 UI 先更新，避免点击时卡顿
                 Qt.callLater(function() {
                     if (AppController.isScanning)
                         scanEngine.scan(path)
@@ -61,7 +63,6 @@ Rectangle {
             for (var i = 0; i < categories.length; i++)
                 total += Number(categories[i].size) || 0
             vizPanel.usedSize = total
-            if (vizPanel.totalSize <= 0) vizPanel.totalSize = total
             if (typeof statusContext !== "undefined" && statusContext) {
                 statusContext.indexedFileCount = fileCount
                 statusContext.operationTimeMs = elapsedMs

@@ -20,6 +20,10 @@
 #include "service/FileOperationService.h"
 #include "agent/ChatBridge.h"
 #include "agent/ToolExecutor.h"
+#include "agent/AIBridge.h"
+#include "agent/ContextBuilder.h"
+#include "agent/CacheManager.h"
+#include "agent/AgentOrchestrator.h"
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +41,41 @@ int main(int argc, char *argv[])
     FileOperationService fileOperationService;
     ChatBridge chatBridge;
     ToolExecutor toolExecutor;
+    AIBridge aiBridge;
+    ContextBuilder contextBuilder;
+    CacheManager cacheManager;
+    AgentOrchestrator agentOrchestrator;
+
+    toolExecutor.setSearchEngine(&searchEngine);
+    toolExecutor.setFileOperationService(&fileOperationService);
+    toolExecutor.setAppSettings(&appSettings);
+
+    aiBridge.setAppSettings(&appSettings);
+    contextBuilder.setSearchEngine(&searchEngine);
+
+    cacheManager.setAppSettings(&appSettings);
+
+    agentOrchestrator.setAIBridge(&aiBridge);
+    agentOrchestrator.setToolExecutor(&toolExecutor);
+    agentOrchestrator.setContextBuilder(&contextBuilder);
+    agentOrchestrator.setChatBridge(&chatBridge);
+    agentOrchestrator.setCacheManager(&cacheManager);
+    agentOrchestrator.setSearchEngine(&searchEngine);
+    agentOrchestrator.setAppSettings(&appSettings);
+
+    QObject::connect(&chatBridge, &ChatBridge::userMessageAdded,
+                     &agentOrchestrator, &AgentOrchestrator::handleUserMessage);
+
+    QObject::connect(&aiBridge, &AIBridge::chatResponseReceived,
+                     &agentOrchestrator, &AgentOrchestrator::handleLLMResponse);
+
+    QObject::connect(&aiBridge, &AIBridge::chatErrorOccurred, &chatBridge, [&chatBridge](const QString &error) {
+        chatBridge.receiveError(error);
+    });
+
+    QObject::connect(&agentOrchestrator, &AgentOrchestrator::busyChanged, &chatBridge, [&agentOrchestrator, &chatBridge]() {
+        chatBridge.setAiThinking(agentOrchestrator.busy());
+    });
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("appSettings", &appSettings);
@@ -50,10 +89,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("fileOperationService", &fileOperationService);
     engine.rootContext()->setContextProperty("chatBridge", &chatBridge);
     engine.rootContext()->setContextProperty("toolExecutor", &toolExecutor);
-
-    toolExecutor.setSearchEngine(&searchEngine);
-    toolExecutor.setFileOperationService(&fileOperationService);
-    toolExecutor.setAppSettings(&appSettings);
+    engine.rootContext()->setContextProperty("agentOrchestrator", &agentOrchestrator);
 
     QObject::connect(&searchEngine, &SearchEngine::resultsReady, &fileModel, [&fileModel](const QList<UnifiedFileRecord> &files) {
         fileModel.setFiles(files);
@@ -64,8 +100,9 @@ int main(int argc, char *argv[])
         statusContext.setOperationTimeMs(static_cast<int>(ms));
     });
 
-    // 限制文件列表大小，避免扫描完成后 setBaseFiles+query 阻塞主线程导致点击卡顿
-    QObject::connect(&scanEngine, &ScanEngine::segmentsReady, &app, [&app, &searchEngine, &fileModel](const QVariantMap &result) {
+    QObject::connect(&scanEngine, &ScanEngine::segmentsReady, &app, [&app, &searchEngine, &fileModel, &contextBuilder](const QVariantMap &result) {
+        contextBuilder.setLastScanResult(result);
+
         QVariantList list = result["fileList"].toList();
         if (list.isEmpty()) {
             QTimer::singleShot(0, &app, [&searchEngine]() {
@@ -95,7 +132,6 @@ int main(int argc, char *argv[])
         QObject::connect(watcher, &QFutureWatcher<QList<UnifiedFileRecord>>::finished, &app, [watcher, &searchEngine]() {
             QList<UnifiedFileRecord> records = watcher->result();
             watcher->deleteLater();
-            // 延迟到下一事件循环，避免阻塞主线程导致点击无响应
             QTimer::singleShot(0, qApp, [records, &searchEngine]() {
                 searchEngine.setBaseFiles(records);
                 searchEngine.query("");
@@ -104,7 +140,6 @@ int main(int argc, char *argv[])
         watcher->setFuture(QtConcurrent::run(convert));
     });
 
-    // 添加 QML 导入路径
     QDir appDir(QCoreApplication::applicationDirPath());
     QStringList searchDirs;
     searchDirs << appDir.absolutePath()
@@ -123,19 +158,16 @@ int main(int argc, char *argv[])
     }
 
     if (!qmlBasePath.isEmpty()) {
-        // 从文件系统加载（开发模式）
         engine.addImportPath(qmlBasePath);
     } else {
         engine.addImportPath("qrc:/");
     }
 
-    // 供 AI 聊天面板加载 HTML 的路径
     QString aiChatHtmlPath = qmlBasePath.isEmpty()
         ? QString()
         : QDir(qmlBasePath).absoluteFilePath("ai-chat/index.html");
     engine.rootContext()->setContextProperty("aiChatHtmlPath", aiChatHtmlPath);
 
-    // 加载 main.qml
     QUrl url;
     if (!qmlBasePath.isEmpty()) {
         url = QUrl::fromLocalFile(QDir(qmlBasePath).absoluteFilePath("main.qml"));

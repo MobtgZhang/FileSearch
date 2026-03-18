@@ -30,15 +30,9 @@ Rectangle {
             onClicked: function() { AppController.currentPage = "disk" }
         }
         NavIcon {
-            icon: "⧉"
-            active: AppController.currentPage === "duplicate"
-            tooltip: "重复文件"
-            onClicked: function() { AppController.currentPage = "duplicate" }
-        }
-        NavIcon {
             icon: "🧹"
             active: AppController.currentPage === "cleanup"
-            tooltip: "清理文件"
+            tooltip: "系统清理"
             onClicked: function() { AppController.currentPage = "cleanup" }
         }
 

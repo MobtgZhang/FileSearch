@@ -12,7 +12,7 @@ class CleanupWorker : public QObject
 public:
     explicit CleanupWorker(QObject *parent = nullptr);
 
-    void scan(const QVariantList &categoryIds);
+    Q_INVOKABLE void scan(const QVariantList &categoryIds);
     void cancel();
 
 signals:
