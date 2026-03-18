@@ -52,6 +52,7 @@ Rectangle {
                     id: searchInput
                     Layout.fillWidth: true
                     Layout.minimumWidth: 60
+                    Layout.alignment: Qt.AlignVCenter
                     placeholderText: "输入搜索条件..."
                     text: "*.mp4  size:>500MB"
                     font.family: Theme.fontFamily
@@ -59,6 +60,10 @@ Rectangle {
                     color: Theme.bright
                     background: Item {}
                     verticalAlignment: TextInput.AlignVCenter
+                    topPadding: 3
+                    bottomPadding: 3
+                    leftPadding: 4
+                    rightPadding: 4
                 }
 
                 Text {
