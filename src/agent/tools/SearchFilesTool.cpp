@@ -1,6 +1,7 @@
 #include "SearchFilesTool.h"
 #include "../../engine/SearchEngine.h"
 #include "../../model/UnifiedFileRecord.h"
+#include <QtGlobal>
 #include <QVariantList>
 
 SearchFilesTool::SearchFilesTool(SearchEngine *engine)
@@ -26,8 +27,14 @@ QVariant SearchFilesTool::execute(const QVariantMap &params)
     QString pattern = params.value("pattern").toString();
     QList<UnifiedFileRecord> results = m_engine->querySync(pattern);
 
+    static constexpr int kMaxFilesInResponse = 400;
+    const int total = results.size();
+
     QVariantList list;
-    for (const auto &r : results) {
+    list.reserve(qMin(total, kMaxFilesInResponse));
+    const int cap = qMin(total, kMaxFilesInResponse);
+    for (int i = 0; i < cap; ++i) {
+        const auto &r = results[i];
         list.append(QVariantMap{
             {"path", r.path},
             {"name", r.name},
@@ -37,7 +44,9 @@ QVariant SearchFilesTool::execute(const QVariantMap &params)
         });
     }
     return QVariantMap{
-        {"count", results.size()},
+        {"count", list.size()},
+        {"total_matched", total},
+        {"truncated", total > kMaxFilesInResponse},
         {"files", list}
     };
 }

@@ -43,9 +43,14 @@ set(SOURCES
     src/agent/tools/DeleteFilesTool.cpp
     src/agent/tools/MoveFilesTool.cpp
     src/agent/tools/ShellTool.cpp
-    src/agent/tools/WebSearchTool.cpp
+    src/agent/tools/ReadFileTool.cpp
+    src/agent/tools/WriteFileTool.cpp
+    src/agent/tools/WebFetchTool.cpp
     src/agent/AgentOrchestrator.cpp
+    src/agent/AgentSandbox.cpp
     src/agent/CacheManager.cpp
+    src/agent/PromptLoader.cpp
+    src/agent/PromptFallbacks.cpp
     src/service/FileOperationService.cpp
 )
 
@@ -68,7 +73,10 @@ add_executable(FileSearch ${SOURCES}
     src/agent/ToolExecutor.h
     src/agent/ContextBuilder.h
     src/agent/AgentOrchestrator.h
+    src/agent/AgentSandbox.h
     src/agent/CacheManager.h
+    src/agent/PromptLoader.h
+    src/agent/PromptFallbacks.h
     src/service/FileOperationService.h
 )
 
@@ -80,6 +88,13 @@ target_include_directories(FileSearch PRIVATE
     ${CMAKE_SOURCE_DIR}/src/agent
     ${CMAKE_SOURCE_DIR}/src/agent/tools
     ${CMAKE_SOURCE_DIR}/src/service
+)
+
+add_custom_command(TARGET FileSearch POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/src/agent/prompts
+        $<TARGET_FILE_DIR:FileSearch>/prompts
+    COMMENT "Copying agent prompts beside executable"
 )
 
 target_link_libraries(FileSearch PRIVATE

@@ -1,7 +1,11 @@
+#include <QByteArray>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QLibraryInfo>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QDir>
 #include <QTimer>
 #include <QUrl>
 #include <QtWebEngineQuick>
@@ -24,10 +28,47 @@
 #include "agent/ContextBuilder.h"
 #include "agent/CacheManager.h"
 #include "agent/AgentOrchestrator.h"
+#include "agent/AgentSandbox.h"
+
+#if defined(Q_OS_LINUX)
+// 与 ChatAgent 一致：https://github.com/MobtgZhang/ChatAgent
+// 官方 Qt 在线安装套件往往不带发行版打包的 fcitx5 平台插件，需把系统 qt6/plugins 并入 QT_PLUGIN_PATH。
+static void setupLinuxFcitxEnvironment()
+{
+    // 必须在 QGuiApplication / QtWebEngineQuick::initialize 之前（ChatAgent main.cpp）
+    qputenv("QT_IM_MODULES", QByteArrayLiteral("fcitx5;fcitx;wayland;ibus"));
+    qputenv("QT_IM_MODULE", QByteArrayLiteral("fcitx5"));
+    qputenv("XMODIFIERS", QByteArrayLiteral("@im=fcitx"));
+
+    QStringList dirs;
+    dirs << QLibraryInfo::path(QLibraryInfo::PluginsPath);
+    static const char *kSystemQt6Plugins[] = {
+        "/usr/lib/x86_64-linux-gnu/qt6/plugins",
+        "/usr/lib/aarch64-linux-gnu/qt6/plugins",
+        "/usr/lib64/qt6/plugins",
+        "/usr/lib/qt6/plugins",
+    };
+    for (const char *p : kSystemQt6Plugins) {
+        const QString d = QString::fromUtf8(p);
+        if (QFileInfo::exists(d) && !dirs.contains(d))
+            dirs.append(d);
+    }
+    QString merged = dirs.join(u':');
+    const QByteArray prev = qgetenv("QT_PLUGIN_PATH");
+    if (!prev.isEmpty())
+        merged += u':' + QString::fromLocal8Bit(prev);
+    qputenv("QT_PLUGIN_PATH", merged.toLocal8Bit());
+}
+#endif
 
 int main(int argc, char *argv[])
 {
+#if defined(Q_OS_LINUX)
+    setupLinuxFcitxEnvironment();
+#endif
     QtWebEngineQuick::initialize();
+    QCoreApplication::setOrganizationName(QStringLiteral("NexFile"));
+    QCoreApplication::setApplicationName(QStringLiteral("FileSearch"));
     QGuiApplication app(argc, argv);
 
     AppSettings appSettings;
@@ -45,15 +86,22 @@ int main(int argc, char *argv[])
     ContextBuilder contextBuilder;
     CacheManager cacheManager;
     AgentOrchestrator agentOrchestrator;
+    AgentSandbox agentSandbox;
 
+    agentSandbox.setAppSettings(&appSettings);
     toolExecutor.setSearchEngine(&searchEngine);
     toolExecutor.setFileOperationService(&fileOperationService);
     toolExecutor.setAppSettings(&appSettings);
+    toolExecutor.setAgentSandbox(&agentSandbox);
 
     aiBridge.setAppSettings(&appSettings);
     contextBuilder.setSearchEngine(&searchEngine);
 
     cacheManager.setAppSettings(&appSettings);
+    QObject::connect(&appSettings, &AppSettings::cacheDirChanged, &cacheManager, [&appSettings, &cacheManager]() {
+        if (!appSettings.cacheDir().isEmpty())
+            cacheManager.setCacheDir(appSettings.cacheDir());
+    });
 
     agentOrchestrator.setAIBridge(&aiBridge);
     agentOrchestrator.setToolExecutor(&toolExecutor);
@@ -77,6 +125,9 @@ int main(int argc, char *argv[])
         chatBridge.setAiThinking(agentOrchestrator.busy());
     });
 
+    QObject::connect(&aiBridge, &AIBridge::streamContentDelta, &chatBridge, &ChatBridge::receiveStreamChunk);
+    QObject::connect(&aiBridge, &AIBridge::streamReasoningDelta, &chatBridge, &ChatBridge::receiveReasoningChunk);
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("appSettings", &appSettings);
     engine.rootContext()->setContextProperty("pathProvider", &pathProvider);
@@ -90,6 +141,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("chatBridge", &chatBridge);
     engine.rootContext()->setContextProperty("toolExecutor", &toolExecutor);
     engine.rootContext()->setContextProperty("agentOrchestrator", &agentOrchestrator);
+    engine.rootContext()->setContextProperty("cacheManager", &cacheManager);
+    engine.rootContext()->setContextProperty("agentSandbox", &agentSandbox);
 
     QObject::connect(&searchEngine, &SearchEngine::resultsReady, &fileModel, [&fileModel](const QList<UnifiedFileRecord> &files) {
         fileModel.setFiles(files);

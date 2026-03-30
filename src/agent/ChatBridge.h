@@ -20,7 +20,14 @@ public slots:
 
     void receiveAiMessage(const QString &text);
     void receiveStreamChunk(const QString &chunk);
+    void receiveStreamStart();
+    void receiveReasoningChunk(const QString &chunk);
+    void receiveThinkingChunk(const QString &text);
+    void receiveThinkingClear();
+    void notifyStreamComplete(const QString &text);
     void receiveToolStatus(const QString &name, const QString &status, const QString &detail);
+    /** 在聊天区展示工具返回（Markdown），callId 用于 Web 端分片重组 */
+    void receiveToolOutput(const QString &toolName, const QString &callId, const QString &markdown);
     void receiveError(const QString &error);
 
     void setAiThinking(bool thinking);
@@ -35,7 +42,16 @@ signals:
 
     void pushAiMessage(const QString &text);
     void pushStreamChunk(const QString &chunk);
+    void pushStreamStart();
+    /** 流结束后用 C++ 侧完整正文覆盖 Web 端（避免 WebChannel 流式丢包导致截断） */
+    void pushStreamBodyResync(const QString &chunk, bool isFirst, bool isLast);
+    void pushStreamFinished();
+    void pushReasoningChunk(const QString &chunk);
+    void pushThinkingChunk(const QString &text);
+    void pushThinkingClear();
     void pushToolStatus(const QString &name, const QString &status, const QString &detail);
+    void pushToolOutput(const QString &toolName, const QString &callId, const QString &chunk, bool isFirst,
+                        bool isLast);
     void pushError(const QString &error);
     void pushClear();
     void pushContextInfo(const QString &info);

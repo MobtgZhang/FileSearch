@@ -58,7 +58,8 @@ private:
 
     QJsonArray m_conversationHistory;
     bool m_busy = false;
-    int m_maxToolRounds = 5;
+    /** 当前用户消息触发的工具链深度；handleUserMessage 时清零 */
+    int m_toolInvocationsThisTurn = 0;
 };
 
 #endif // AGENTORCHESTRATOR_H

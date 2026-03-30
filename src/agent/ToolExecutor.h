@@ -11,6 +11,7 @@
 class SearchEngine;
 class FileOperationService;
 class AppSettings;
+class AgentSandbox;
 
 class ToolExecutor : public QObject
 {
@@ -22,6 +23,7 @@ public:
     void setSearchEngine(SearchEngine *engine);
     void setFileOperationService(FileOperationService *service);
     void setAppSettings(AppSettings *settings);
+    void setAgentSandbox(AgentSandbox *sandbox);
 
     Q_INVOKABLE QVariant execute(const QString &toolName, const QVariantMap &params);
 
@@ -35,10 +37,13 @@ signals:
 private:
     void rebuildTools();
     IAgentTool *toolForName(const QString &name) const;
+    static bool toolNeedsDestructiveConfirm(const QString &toolName, const QVariantMap &params);
+    static QString toolConsentDetail(const QString &toolName, const QVariantMap &params);
 
     SearchEngine *m_searchEngine = nullptr;
     FileOperationService *m_fileOperationService = nullptr;
     AppSettings *m_appSettings = nullptr;
+    AgentSandbox *m_sandbox = nullptr;
     std::vector<std::unique_ptr<IAgentTool>> m_tools;
 };
 

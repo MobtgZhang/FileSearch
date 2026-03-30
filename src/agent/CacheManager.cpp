@@ -1,14 +1,17 @@
 #include "CacheManager.h"
 #include "AppSettings.h"
+#include "PromptLoader.h"
+#include "PromptFallbacks.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDateTime>
 #include <QUuid>
-
+#include <QUrl>
 CacheManager::CacheManager(QObject *parent)
     : QObject(parent)
     , m_sessionId(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8))
@@ -24,7 +27,7 @@ void CacheManager::setCacheDir(const QString &dir)
 void CacheManager::setAppSettings(AppSettings *settings)
 {
     m_appSettings = settings;
-    if (m_appSettings && m_cacheDir.isEmpty())
+    if (m_appSettings && !m_appSettings->cacheDir().isEmpty())
         setCacheDir(m_appSettings->cacheDir());
 }
 
@@ -33,9 +36,19 @@ void CacheManager::ensureDirs()
     if (m_cacheDir.isEmpty())
         return;
     QDir dir(m_cacheDir);
-    dir.mkpath("memory");
-    dir.mkpath("history");
-    dir.mkpath("skill");
+    dir.mkpath(QStringLiteral("memory"));
+    dir.mkpath(QStringLiteral("history"));
+    dir.mkpath(QStringLiteral("skills/imported"));
+}
+
+QString CacheManager::skillsImportedPath() const
+{
+    return m_cacheDir + QStringLiteral("/skills/imported");
+}
+
+QString CacheManager::skillsImportedDir() const
+{
+    return skillsImportedPath();
 }
 
 void CacheManager::newSession()
@@ -45,22 +58,44 @@ void CacheManager::newSession()
 
 QString CacheManager::historyFilePath() const
 {
-    return m_cacheDir + "/history/session_" + m_sessionId + ".json";
+    return m_cacheDir + QStringLiteral("/history/session_") + m_sessionId + QStringLiteral(".json");
 }
 
 QString CacheManager::memoryFilePath() const
 {
-    return m_cacheDir + "/memory/memory.json";
+    return m_cacheDir + QStringLiteral("/memory/longterm.json");
 }
 
-QString CacheManager::skillFilePath() const
+QString CacheManager::l1HotFilePath() const
 {
-    return m_cacheDir + "/skill/skill_log.json";
+    return m_cacheDir + QStringLiteral("/memory/l1_hot.json");
+}
+
+QString CacheManager::skillLogPath() const
+{
+    return m_cacheDir + QStringLiteral("/skills/skill_log.json");
 }
 
 QString CacheManager::sessionDir() const
 {
-    return m_cacheDir + "/history";
+    return m_cacheDir + QStringLiteral("/history");
+}
+
+bool CacheManager::importSkillMarkdown(const QString &localPath)
+{
+    QString path = QUrl(localPath).toLocalFile();
+    if (path.isEmpty())
+        path = localPath;
+    QFileInfo fi(path);
+    if (!fi.exists() || !fi.isFile())
+        return false;
+    ensureDirs();
+    QDir destDir(skillsImportedPath());
+    destDir.mkpath(QStringLiteral("."));
+    const QString dest = destDir.filePath(fi.completeBaseName() + QStringLiteral("_")
+                                          + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss"))
+                                          + QStringLiteral(".md"));
+    return QFile::copy(localPath, dest);
 }
 
 void CacheManager::appendHistory(const QString &role, const QString &content)
@@ -68,10 +103,10 @@ void CacheManager::appendHistory(const QString &role, const QString &content)
     QJsonArray history = readJsonArrayFile(historyFilePath());
 
     QJsonObject entry;
-    entry["role"] = role;
-    entry["content"] = content;
-    entry["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
-    entry["session"] = m_sessionId;
+    entry[QStringLiteral("role")] = role;
+    entry[QStringLiteral("content")] = content;
+    entry[QStringLiteral("timestamp")] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    entry[QStringLiteral("session")] = m_sessionId;
     history.append(entry);
 
     writeJsonArrayFile(historyFilePath(), history);
@@ -94,86 +129,178 @@ void CacheManager::clearHistory()
     writeJsonArrayFile(historyFilePath(), QJsonArray());
 }
 
+void CacheManager::appendL1Turn(const QString &userLine, const QString &assistantLine)
+{
+    QJsonArray arr = readJsonArrayFile(l1HotFilePath());
+    QJsonObject e;
+    e[QStringLiteral("user")] = userLine.left(800);
+    e[QStringLiteral("assistant")] = assistantLine.left(800);
+    e[QStringLiteral("timestamp")] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    arr.append(e);
+    while (arr.size() > 12)
+        arr.removeFirst();
+    writeJsonArrayFile(l1HotFilePath(), arr);
+}
+
+QString CacheManager::loadL1HotText() const
+{
+    QJsonArray arr = readJsonArrayFile(l1HotFilePath());
+    if (arr.isEmpty())
+        return QStringLiteral("(空)");
+    QString out;
+    for (int i = qMax(0, arr.size() - 6); i < arr.size(); ++i) {
+        QJsonObject o = arr[i].toObject();
+        out += QStringLiteral("用户: ") + o[QStringLiteral("user")].toString() + QStringLiteral("\n");
+        out += QStringLiteral("助手: ") + o[QStringLiteral("assistant")].toString() + QStringLiteral("\n\n");
+    }
+    return out.trimmed();
+}
+
+QString CacheManager::loadImportedSkillsExcerpt(int maxChars) const
+{
+    QDir d(skillsImportedPath());
+    if (!d.exists())
+        return QString();
+    const QStringList files = d.entryList(QStringList{QStringLiteral("*.md")}, QDir::Files, QDir::Name);
+    QString combined;
+    for (const QString &fn : files) {
+        QFile f(d.filePath(fn));
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        QString body = QString::fromUtf8(f.readAll());
+        combined += QStringLiteral("### ") + fn + QStringLiteral("\n") + body + QStringLiteral("\n\n");
+        if (combined.size() > maxChars)
+            break;
+    }
+    if (combined.size() > maxChars)
+        combined = combined.left(maxChars) + QStringLiteral("\n…(截断)");
+    return combined.trimmed();
+}
+
+QString CacheManager::loadRecentSessionHistoryExcerpt(int maxEntries) const
+{
+    QJsonArray history = readJsonArrayFile(historyFilePath());
+    if (history.isEmpty())
+        return QStringLiteral("(本会话尚无落盘记录)");
+    QString out;
+    int start = qMax(0, history.size() - maxEntries);
+    for (int i = start; i < history.size(); ++i) {
+        QJsonObject o = history[i].toObject();
+        QString role = o[QStringLiteral("role")].toString();
+        QString c = o[QStringLiteral("content")].toString();
+        if (c.length() > 240)
+            c = c.left(240) + QStringLiteral("…");
+        out += role + QStringLiteral(": ") + c + QStringLiteral("\n");
+    }
+    return out.trimmed();
+}
+
+QString CacheManager::buildMemoryHierarchyPrompt() const
+{
+    QString block = PromptLoader::loadUtf8WithFallback(QStringLiteral("memory_hierarchy_intro.md"),
+                                                       PromptFallbacks::memoryHierarchyIntro());
+    if (!block.endsWith(QLatin1Char('\n')))
+        block += QLatin1Char('\n');
+    if (!block.endsWith(QLatin1String("\n\n")))
+        block += QLatin1Char('\n');
+
+    QString l3skills = loadImportedSkillsExcerpt(10000);
+    QString l3mem = loadMemorySummary();
+    block += QStringLiteral("—— L3 技能正文 ——\n");
+    block += l3skills.isEmpty() ? QStringLiteral("(未导入技能)") : l3skills;
+    block += QStringLiteral("\n\n—— L3 长期摘要 ——\n");
+    block += l3mem.isEmpty() ? QStringLiteral("(无)") : l3mem;
+
+    block += QStringLiteral("\n\n—— L2 会话节选 ——\n");
+    block += loadRecentSessionHistoryExcerpt(10);
+
+    block += QStringLiteral("\n\n—— L1 热行 ——\n");
+    block += loadL1HotText();
+
+    return block.trimmed();
+}
+
 void CacheManager::updateMemory(const QJsonArray &conversationHistory)
 {
     QJsonObject memory = readJsonObjectFile(memoryFilePath());
 
-    QJsonArray summaries = memory["summaries"].toArray();
+    QJsonArray summaries = memory[QStringLiteral("summaries")].toArray();
 
     if (conversationHistory.size() >= 6) {
         QString summary;
         int count = 0;
         for (int i = conversationHistory.size() - 6; i < conversationHistory.size(); ++i) {
             QJsonObject msg = conversationHistory[i].toObject();
-            if (msg["role"].toString() == "user" || msg["role"].toString() == "assistant") {
-                QString content = msg["content"].toString();
+            if (msg[QStringLiteral("role")].toString() == QStringLiteral("user")
+                || msg[QStringLiteral("role")].toString() == QStringLiteral("assistant")) {
+                QString content = msg[QStringLiteral("content")].toString();
                 if (content.length() > 100)
-                    content = content.left(100) + "...";
-                summary += msg["role"].toString() + ": " + content + "\n";
+                    content = content.left(100) + QStringLiteral("...");
+                summary += msg[QStringLiteral("role")].toString() + QStringLiteral(": ") + content + QStringLiteral("\n");
                 count++;
             }
         }
 
         if (count > 0) {
             QJsonObject entry;
-            entry["summary"] = summary.trimmed();
-            entry["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
-            entry["session"] = m_sessionId;
+            entry[QStringLiteral("summary")] = summary.trimmed();
+            entry[QStringLiteral("timestamp")] = QDateTime::currentDateTime().toString(Qt::ISODate);
+            entry[QStringLiteral("session")] = m_sessionId;
             summaries.append(entry);
 
-            while (summaries.size() > 50)
+            while (summaries.size() > 80)
                 summaries.removeFirst();
         }
     }
 
-    memory["summaries"] = summaries;
-    memory["last_updated"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    memory[QStringLiteral("summaries")] = summaries;
+    memory[QStringLiteral("last_updated")] = QDateTime::currentDateTime().toString(Qt::ISODate);
     writeJsonObjectFile(memoryFilePath(), memory);
 }
 
 QString CacheManager::loadMemorySummary() const
 {
     QJsonObject memory = readJsonObjectFile(memoryFilePath());
-    QJsonArray summaries = memory["summaries"].toArray();
+    QJsonArray summaries = memory[QStringLiteral("summaries")].toArray();
     if (summaries.isEmpty())
         return QString();
 
     QString result;
-    int start = qMax(0, summaries.size() - 5);
+    int start = qMax(0, summaries.size() - 8);
     for (int i = start; i < summaries.size(); ++i) {
         QJsonObject entry = summaries[i].toObject();
-        result += "[" + entry["timestamp"].toString() + "]\n";
-        result += entry["summary"].toString() + "\n\n";
+        result += QStringLiteral("[") + entry[QStringLiteral("timestamp")].toString() + QStringLiteral("]\n");
+        result += entry[QStringLiteral("summary")].toString() + QStringLiteral("\n\n");
     }
     return result.trimmed();
 }
 
 void CacheManager::saveMemoryEntry(const QString &key, const QJsonObject &value)
 {
-    QString path = m_cacheDir + "/memory/" + key + ".json";
+    QString path = m_cacheDir + QStringLiteral("/memory/") + key + QStringLiteral(".json");
     writeJsonObjectFile(path, value);
 }
 
 QJsonObject CacheManager::loadMemoryEntry(const QString &key) const
 {
-    QString path = m_cacheDir + "/memory/" + key + ".json";
+    QString path = m_cacheDir + QStringLiteral("/memory/") + key + QStringLiteral(".json");
     return readJsonObjectFile(path);
 }
 
 void CacheManager::recordSkillUsage(const QJsonObject &entry)
 {
-    QJsonArray skills = readJsonArrayFile(skillFilePath());
+    QJsonArray skills = readJsonArrayFile(skillLogPath());
     skills.append(entry);
 
-    while (skills.size() > 200)
+    while (skills.size() > 400)
         skills.removeFirst();
 
-    writeJsonArrayFile(skillFilePath(), skills);
+    writeJsonArrayFile(skillLogPath(), skills);
 }
 
 QJsonArray CacheManager::loadSkillPatterns() const
 {
-    return readJsonArrayFile(skillFilePath());
+    return readJsonArrayFile(skillLogPath());
 }
 
 QJsonObject CacheManager::findBestSkillMatch(const QString &taskDescription) const
