@@ -1,6 +1,7 @@
 #ifndef SEARCHENGINE_H
 #define SEARCHENGINE_H
 
+#include <QMutex>
 #include <QObject>
 #include "../model/UnifiedFileRecord.h"
 
@@ -29,6 +30,7 @@ signals:
 private:
     bool matchesTypeFilter(const UnifiedFileRecord &rec) const;
 
+    mutable QMutex m_mutex;
     QList<UnifiedFileRecord> m_baseFiles;
     QString m_typeFilter;
 };

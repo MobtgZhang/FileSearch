@@ -1,5 +1,6 @@
 #include "SearchEngine.h"
 #include <QElapsedTimer>
+#include <QMutexLocker>
 #include <algorithm>
 
 namespace {
@@ -18,6 +19,7 @@ SearchEngine::SearchEngine(QObject *parent)
 
 void SearchEngine::setBaseFiles(const QList<UnifiedFileRecord> &files)
 {
+    QMutexLocker lock(&m_mutex);
     m_baseFiles = files;
 }
 
@@ -28,30 +30,41 @@ QString SearchEngine::typeFilter() const
 
 void SearchEngine::setTypeFilter(const QString &filter)
 {
-    if (m_typeFilter != filter) {
-        m_typeFilter = filter;
-        emit typeFilterChanged();
+    bool changed = false;
+    {
+        QMutexLocker lock(&m_mutex);
+        if (m_typeFilter != filter) {
+            m_typeFilter = filter;
+            changed = true;
+        }
     }
+    if (changed)
+        emit typeFilterChanged();
 }
 
 bool SearchEngine::matchesTypeFilter(const UnifiedFileRecord &rec) const
 {
-    if (m_typeFilter.isEmpty() || m_typeFilter == "全部")
+    QString tf;
+    {
+        QMutexLocker lock(&m_mutex);
+        tf = m_typeFilter;
+    }
+    if (tf.isEmpty() || tf == "全部")
         return true;
 
-    if (m_typeFilter == "文件夹")
+    if (tf == "文件夹")
         return rec.isDirectory;
-    if (m_typeFilter == "视频")
+    if (tf == "视频")
         return !rec.isDirectory && VIDEO_EXTS.contains(rec.extension.toLower());
-    if (m_typeFilter == "文档")
+    if (tf == "文档")
         return !rec.isDirectory && DOC_EXTS.contains(rec.extension.toLower());
-    if (m_typeFilter == "图片")
+    if (tf == "图片")
         return !rec.isDirectory && PICTURE_EXTS.contains(rec.extension.toLower());
-    if (m_typeFilter == "音频")
+    if (tf == "音频")
         return !rec.isDirectory && MUSIC_EXTS.contains(rec.extension.toLower());
-    if (m_typeFilter == "压缩包")
+    if (tf == "压缩包")
         return !rec.isDirectory && ARCHIVE_EXTS.contains(rec.extension.toLower());
-    if (m_typeFilter == "可执行文件")
+    if (tf == "可执行文件")
         return !rec.isDirectory && EXEC_EXTS.contains(rec.extension.toLower());
 
     return true;
@@ -62,16 +75,22 @@ void SearchEngine::query(const QString &pattern)
     QElapsedTimer timer;
     timer.start();
 
+    QList<UnifiedFileRecord> baseCopy;
+    {
+        QMutexLocker lock(&m_mutex);
+        baseCopy = m_baseFiles;
+    }
+
     QList<UnifiedFileRecord> results;
     QString lowerPattern = pattern.trimmed().toLower();
 
     if (lowerPattern.isEmpty()) {
-        for (const auto &f : m_baseFiles) {
+        for (const auto &f : baseCopy) {
             if (matchesTypeFilter(f))
                 results.append(f);
         }
     } else {
-        for (const auto &f : m_baseFiles) {
+        for (const auto &f : baseCopy) {
             if (f.name.toLower().contains(lowerPattern)
                 || f.path.toLower().contains(lowerPattern)
                 || f.extension.toLower().contains(lowerPattern)) {
@@ -98,17 +117,24 @@ void SearchEngine::query(const QString &pattern)
 
 void SearchEngine::clear()
 {
+    QMutexLocker lock(&m_mutex);
     m_baseFiles.clear();
 }
 
 QList<UnifiedFileRecord> SearchEngine::querySync(const QString &pattern) const
 {
+    QList<UnifiedFileRecord> baseCopy;
+    {
+        QMutexLocker lock(&m_mutex);
+        baseCopy = m_baseFiles;
+    }
+
     QString lowerPattern = pattern.trimmed().toLower();
     if (lowerPattern.isEmpty())
-        return m_baseFiles;
+        return baseCopy;
 
     QList<UnifiedFileRecord> results;
-    for (const auto &f : m_baseFiles) {
+    for (const auto &f : baseCopy) {
         if (f.name.toLower().contains(lowerPattern)
             || f.path.toLower().contains(lowerPattern)
             || f.extension.toLower().contains(lowerPattern)) {
