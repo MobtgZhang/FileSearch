@@ -50,12 +50,14 @@ QtObject {
         for (var i = 0; i < list.length; i++) {
             if (list[i].id === categoryId) {
                 var c = list[i]
+                if (c.selected === selected)
+                    return
                 c.selected = selected
                 list[i] = c
-                break
+                categories = list
+                return
             }
         }
-        categories = list
     }
 
     function getSelectedFiles() {

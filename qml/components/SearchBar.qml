@@ -95,6 +95,7 @@ Rectangle {
                     Component.onCompleted: {
                         if (typeof searchEngine !== "undefined" && searchEngine)
                             searchEngine.query("")
+                        Qt.callLater(function () { searchInput.forceActiveFocus() })
                     }
                 }
 

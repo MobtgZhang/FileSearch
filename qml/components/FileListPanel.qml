@@ -200,7 +200,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            focus: true
+            // 勿默认抢焦点，否则启动后键盘/输入法易落在列表上，搜索框等需多点一次才像「无法输入中文」。
+            focus: false
             activeFocusOnTab: true
             model: fileModel
             delegate: FileRowDelegate { }

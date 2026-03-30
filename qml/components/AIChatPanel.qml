@@ -27,9 +27,35 @@ Rectangle {
         if (wv) wv.runJavaScript(jsCode)
     }
 
+    function modelArrayJson() {
+        if (typeof appSettings === "undefined" || !appSettings)
+            return "[]"
+        var m = appSettings.apiModelList
+        var parts = []
+        for (var i = 0; i < m.length; ++i)
+            parts.push(JSON.stringify(String(m[i])))
+        return "[" + parts.join(",") + "]"
+    }
+
+    function syncModelsToWeb() {
+        if (!webLoader.active || typeof appSettings === "undefined" || !appSettings)
+            return
+        var arr = modelArrayJson()
+        var cur = JSON.stringify(String(appSettings.apiModel))
+        pushJsCall("(window.__applyModelList&&window.__applyModelList(" + arr + "," + cur + "))")
+    }
+
+    function pushModelsRefreshDone(ok, msg) {
+        var m = JSON.stringify(msg || "")
+        pushJsCall("(window.__onModelsRefreshDone&&window.__onModelsRefreshDone(" + (ok ? "true" : "false") + "," + m + "))")
+    }
+
     Connections {
         target: (typeof appSettings !== "undefined" && appSettings) ? appSettings : null
         function onThemeModeChanged() { aiPanel.applyThemeToWeb() }
+        function onApiModelListChanged() { aiPanel.syncModelsToWeb() }
+        function onApiModelChanged() { aiPanel.syncModelsToWeb() }
+        function onApiModelListRefreshFinished(ok, msg) { aiPanel.pushModelsRefreshDone(ok, msg) }
     }
 
     Loader {
@@ -61,7 +87,58 @@ Rectangle {
                             chatBridge.setModelName(model)
                     }
 
+                    function refreshModelsFromApi() {
+                        if (typeof appSettings !== "undefined" && appSettings)
+                            appSettings.refreshApiModelList()
+                    }
+
+                    function setSelectedModel(modelId) {
+                        if (typeof appSettings !== "undefined" && appSettings)
+                            appSettings.apiModel = modelId
+                        if (typeof chatBridge !== "undefined" && chatBridge)
+                            chatBridge.setModelName(modelId)
+                    }
+
                     property bool aiThinking: (typeof chatBridge !== "undefined" && chatBridge) ? chatBridge.aiThinking : false
+
+                    signal pushAiMessage(string text)
+                    signal pushStreamChunk(string chunk)
+                    signal pushStreamStart()
+                    signal pushStreamBodyResync(string chunk, bool isFirst, bool isLast)
+                    signal pushStreamFinished()
+                    signal pushReasoningChunk(string chunk)
+                    signal pushThinkingChunk(string text)
+                    signal pushThinkingClear()
+                    signal pushToolStatus(string name, string status, string detail)
+                    signal pushToolOutput(string toolName, string callId, string chunk, bool isFirst, bool isLast)
+                    signal pushError(string error)
+                    signal pushClear()
+                    signal pushContextInfo(string info)
+                    signal pushModelName(string model)
+                }
+
+                Connections {
+                    target: (typeof chatBridge !== "undefined" && chatBridge) ? chatBridge : null
+                    function onPushAiMessage(text) { channelBridge.pushAiMessage(text) }
+                    function onPushStreamChunk(chunk) { channelBridge.pushStreamChunk(chunk) }
+                    function onPushStreamStart() { channelBridge.pushStreamStart() }
+                    function onPushStreamBodyResync(chunk, isFirst, isLast) {
+                        channelBridge.pushStreamBodyResync(chunk, isFirst, isLast)
+                    }
+                    function onPushStreamFinished() { channelBridge.pushStreamFinished() }
+                    function onPushReasoningChunk(chunk) { channelBridge.pushReasoningChunk(chunk) }
+                    function onPushThinkingChunk(text) { channelBridge.pushThinkingChunk(text) }
+                    function onPushThinkingClear() { channelBridge.pushThinkingClear() }
+                    function onPushToolStatus(name, status, detail) {
+                        channelBridge.pushToolStatus(name, status, detail)
+                    }
+                    function onPushToolOutput(toolName, callId, chunk, isFirst, isLast) {
+                        channelBridge.pushToolOutput(toolName, callId, chunk, isFirst, isLast)
+                    }
+                    function onPushError(error) { channelBridge.pushError(error) }
+                    function onPushClear() { channelBridge.pushClear() }
+                    function onPushContextInfo(info) { channelBridge.pushContextInfo(info) }
+                    function onPushModelName(model) { channelBridge.pushModelName(model) }
                 }
 
                 WebEngineView {
@@ -81,6 +158,7 @@ Rectangle {
                         if (progress === 100) {
                             aiPanel.applyThemeToWeb()
                             themeSyncTimer.restart()
+                            Qt.callLater(aiPanel.syncModelsToWeb)
                         }
                     }
                 }

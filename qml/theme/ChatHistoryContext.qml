@@ -31,6 +31,19 @@ QtObject {
         history = history.concat([item])
     }
 
+    function addToolExecution(name, status, result) {
+        var n = name || ""
+        var st = status || ""
+        var r = result || ""
+        var line = "「" + n + "」" + st + (r.length ? " — " + r : "")
+        var item = {
+            role: "tool",
+            content: line,
+            timestamp: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm")
+        }
+        history = history.concat([item])
+    }
+
     function addConversation(userText, aiText) {
         addUserMessage(userText)
         addAiMessage(aiText)

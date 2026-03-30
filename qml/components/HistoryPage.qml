@@ -93,7 +93,9 @@ Rectangle {
                         Layout.preferredHeight: msgContent.implicitHeight + 36
                         color: modelData.role === "user"
                                ? Qt.rgba(Theme.accent2.r, Theme.accent2.g, Theme.accent2.b, 0.08)
-                               : Qt.rgba(0, 0, 0, 0.03)
+                               : (modelData.role === "tool"
+                                  ? Qt.rgba(Theme.accent4.r, Theme.accent4.g, Theme.accent4.b, 0.08)
+                                  : Qt.rgba(0, 0, 0, 0.03))
                         border.color: Theme.border
                         border.width: 1
                         radius: 8
@@ -114,10 +116,14 @@ Rectangle {
                                     radius: 4
                                     color: modelData.role === "user"
                                            ? Qt.rgba(Theme.accent2.r, Theme.accent2.g, Theme.accent2.b, 0.15)
-                                           : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12)
+                                           : (modelData.role === "tool"
+                                              ? Qt.rgba(Theme.accent4.r, Theme.accent4.g, Theme.accent4.b, 0.15)
+                                              : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12))
                                     border.color: modelData.role === "user"
                                                    ? Qt.rgba(Theme.accent2.r, Theme.accent2.g, Theme.accent2.b, 0.35)
-                                                   : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+                                                   : (modelData.role === "tool"
+                                                      ? Qt.rgba(Theme.accent4.r, Theme.accent4.g, Theme.accent4.b, 0.35)
+                                                      : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25))
                                     border.width: 1
 
                                     Text {
@@ -126,8 +132,12 @@ Rectangle {
                                         font.pixelSize: 10
                                         font.weight: Font.DemiBold
                                         font.family: Theme.fontFamily
-                                        color: modelData.role === "user" ? Theme.accent2 : Theme.accent
-                                        text: modelData.role === "user" ? "我" : "NexFile AI"
+                                        color: modelData.role === "user"
+                                               ? Theme.accent2
+                                               : (modelData.role === "tool" ? Theme.accent4 : Theme.accent)
+                                        text: modelData.role === "user"
+                                              ? "我"
+                                              : (modelData.role === "tool" ? "工具" : "NexFile AI")
                                     }
                                 }
                                 Text {
@@ -146,6 +156,7 @@ Rectangle {
                                 font.pixelSize: 12
                                 color: Theme.text
                                 text: modelData.content
+                                textFormat: Text.MarkdownText
                                 wrapMode: Text.WordWrap
                             }
                         }

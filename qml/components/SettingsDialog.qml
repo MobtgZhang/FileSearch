@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs
 import "../theme" 1.0
 
 Popup {
@@ -14,6 +15,28 @@ Popup {
     closePolicy: Popup.CloseOnEscape
 
     property int currentPage: 0
+    property string modelRefreshHint: ""
+
+    Connections {
+        target: (typeof appSettings !== "undefined" && appSettings) ? appSettings : null
+        function onApiModelListChanged() {
+            if (!appSettings)
+                return
+            modelCombo.model = appSettings.apiModelList
+            var ix = modelCombo.model.indexOf(appSettings.apiModel)
+            modelCombo.currentIndex = ix >= 0 ? ix : 0
+        }
+        function onApiModelChanged() {
+            if (!appSettings)
+                return
+            var ix = modelCombo.model.indexOf(appSettings.apiModel)
+            if (ix >= 0)
+                modelCombo.currentIndex = ix
+        }
+        function onApiModelListRefreshFinished(ok, msg) {
+            settingsPopup.modelRefreshHint = msg
+        }
+    }
 
     enter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
@@ -100,7 +123,8 @@ Popup {
                         { label: "通用", desc: "语言、主题、缓存" },
                         { label: "AI 模型", desc: "API 与模型选择" },
                         { label: "参数", desc: "采样与提示词" },
-                        { label: "网络", desc: "搜索引擎与代理" }
+                        { label: "Agent", desc: "轮次与沙箱" },
+                        { label: "网络", desc: "HTTP 代理" }
                     ]
 
                     delegate: Item {
@@ -195,7 +219,7 @@ Popup {
                 Layout.rightMargin: 16
 
                 Text {
-                    text: ["通用设置", "AI 模型配置", "参数调整", "网络设置"][settingsPopup.currentPage]
+                    text: ["通用设置", "AI 模型配置", "参数调整", "网络与代理"][settingsPopup.currentPage]
                     color: Theme.bright
                     font.pixelSize: 16
                     font.weight: Font.Medium
@@ -392,8 +416,50 @@ Popup {
                                     id: cacheDirField
                                     Layout.fillWidth: true
                                     text: appSettings ? appSettings.cacheDir : ""
-                                    placeholderText: "~/.cache/FileSearch/"
+                                    placeholderText: "~/.cache/NexFile（下含 skills/、history/）"
                                     onEditingFinished: if (appSettings) appSettings.cacheDir = text
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appSettings ? ("配置文件 settings.json：\n" + appSettings.settingsJsonPath()) : ""
+                                    color: Theme.muted
+                                    font.pixelSize: 10
+                                    font.family: Theme.fontDisplay
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (typeof cacheManager !== "undefined" && cacheManager)
+                                          ? ("已导入技能目录：\n" + cacheManager.skillsImportedDir()) : ""
+                                    color: Theme.muted
+                                    font.pixelSize: 10
+                                    font.family: Theme.fontDisplay
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 36
+                                    radius: 8
+                                    color: importSkillMouse.containsMouse ? Theme.highlight : Theme.input
+                                    border.color: Theme.border
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "导入 Skill（Markdown）"
+                                        color: Theme.text
+                                        font.pixelSize: 12
+                                        font.family: Theme.fontDisplay
+                                    }
+                                    MouseArea {
+                                        id: importSkillMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: skillImportDialog.open()
+                                    }
                                 }
                             }
                         }
@@ -443,6 +509,31 @@ Popup {
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 16
                                     Layout.rightMargin: 16
+                                    spacing: 8
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: "API Key"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; font.family: Theme.fontDisplay }
+                                        Text { text: "写入 settings.json，也可使用环境变量 OPENAI_API_KEY"; color: Theme.muted; font.pixelSize: 11; font.family: Theme.fontDisplay; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                    }
+
+                                    FieldInput {
+                                        id: apiKeyField
+                                        Layout.fillWidth: true
+                                        isPassword: true
+                                        text: appSettings ? appSettings.apiKey : ""
+                                        placeholderText: "sk-…"
+                                        onEditingFinished: if (appSettings) appSettings.apiKey = text
+                                    }
+                                }
+
+                                CardDivider {}
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 16
+                                    Layout.rightMargin: 16
                                     Layout.bottomMargin: 4
                                     spacing: 8
 
@@ -450,7 +541,14 @@ Popup {
                                         Layout.fillWidth: true
                                         spacing: 2
                                         Text { text: "模型"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; font.family: Theme.fontDisplay }
-                                        Text { text: "选择对话使用的模型"; color: Theme.muted; font.pixelSize: 11; font.family: Theme.fontDisplay }
+                                        Text {
+                                            text: "从 API 地址请求 GET /models 拉取列表；右侧聊天栏也可刷新"
+                                            color: Theme.muted
+                                            font.pixelSize: 11
+                                            font.family: Theme.fontDisplay
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                        }
                                     }
 
                                     RowLayout {
@@ -469,6 +567,7 @@ Popup {
                                             width: refreshRow.implicitWidth + 20
                                             height: 34
                                             radius: 8
+                                            opacity: (appSettings && appSettings.apiModelsRefreshing) ? 0.55 : 1
                                             color: refreshMouse.containsMouse ? Theme.highlight : Theme.input
                                             border.color: Theme.border
                                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -486,7 +585,7 @@ Popup {
                                                 }
                                                 Text {
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    text: "刷新"
+                                                    text: (appSettings && appSettings.apiModelsRefreshing) ? "拉取中" : "刷新"
                                                     color: Theme.text
                                                     font.pixelSize: 12
                                                     font.family: Theme.fontDisplay
@@ -497,10 +596,24 @@ Popup {
                                                 id: refreshMouse
                                                 anchors.fill: parent
                                                 hoverEnabled: true
+                                                enabled: appSettings && !appSettings.apiModelsRefreshing
                                                 cursorShape: Qt.PointingHandCursor
-                                                onClicked: if (appSettings) appSettings.refreshApiModelList()
+                                                onClicked: if (appSettings) {
+                                                    settingsPopup.modelRefreshHint = ""
+                                                    appSettings.refreshApiModelList()
+                                                }
                                             }
                                         }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: settingsPopup.modelRefreshHint !== ""
+                                        text: settingsPopup.modelRefreshHint
+                                        color: Theme.muted
+                                        font.pixelSize: 10
+                                        font.family: Theme.fontDisplay
+                                        wrapMode: Text.Wrap
                                     }
                                 }
                             }
@@ -559,9 +672,9 @@ Popup {
 
                                 SliderSection {
                                     label: "Max Tokens"
-                                    hint: "单次回复最大 token 数"
-                                    value: appSettings ? appSettings.maxTokens : 4096
-                                    from: 64; to: 128000; stepSize: 256; isInt: true
+                                    hint: "单次回复最大 token 数（上限 65535）"
+                                    value: appSettings ? appSettings.maxTokens : 65535
+                                    from: 64; to: 65535; stepSize: 256; isInt: true
                                     scrollView: contentFlick
                                     onMoved: (v) => { if (appSettings) appSettings.maxTokens = Math.round(v) }
                                 }
@@ -621,7 +734,7 @@ Popup {
                     }
 
                     // ────────────────────────────────────────
-                    //  Page 3: 网络设置
+                    //  Page 3: Agent 与沙箱
                     // ────────────────────────────────────────
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -629,29 +742,120 @@ Popup {
                         visible: settingsPopup.currentPage === 3
 
                         SettingsCard {
-                            cardTitle: "搜索"
+                            cardTitle: "Agent 工具轮次"
 
-                            RowLayout {
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 16
+                                Layout.rightMargin: 16
+                                spacing: 10
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "限制单次对话中模型可发起的工具调用轮数（每轮可含多个工具）。设为 -1 表示不限制；设为 0 表示不使用 Agent（不执行工具，仅普通对话）。"
+                                    color: Theme.muted
+                                    font.pixelSize: 11
+                                    font.family: Theme.fontDisplay
+                                    wrapMode: Text.Wrap
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Text {
+                                        text: "最大轮次"
+                                        color: Theme.text
+                                        font.pixelSize: 13
+                                        font.weight: Font.Medium
+                                        font.family: Theme.fontDisplay
+                                    }
+
+                                    SpinBox {
+                                        id: agentRoundsSpin
+                                        Layout.preferredWidth: 140
+                                        from: -1
+                                        to: 2048
+                                        stepSize: 1
+                                        editable: true
+                                        value: appSettings ? appSettings.agentMaxToolRounds : -1
+
+                                        onValueModified: {
+                                            if (appSettings)
+                                                appSettings.agentMaxToolRounds = value
+                                        }
+                                    }
+                                }
+
+                                Connections {
+                                    target: (typeof appSettings !== "undefined" && appSettings) ? appSettings : null
+                                    function onAgentMaxToolRoundsChanged() {
+                                        if (appSettings)
+                                            agentRoundsSpin.value = appSettings.agentMaxToolRounds
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingsCard {
+                            cardTitle: "沙箱与安全"
+
+                            ColumnLayout {
                                 Layout.fillWidth: true
                                 Layout.leftMargin: 16
                                 Layout.rightMargin: 16
                                 spacing: 12
 
-                                ColumnLayout {
+                                Text {
                                     Layout.fillWidth: true
-                                    spacing: 2
-                                    Text { text: "搜索引擎"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; font.family: Theme.fontDisplay }
-                                    Text { text: "联网搜索使用的引擎"; color: Theme.muted; font.pixelSize: 11; font.family: Theme.fontDisplay }
+                                    text: "开启后，删除/移动/写文件、Shell 等危险工具执行前会弹出确认（类似 Cursor 命令执行）。关闭后不再询问，将直接执行这些工具（请仅在可信环境下关闭）。"
+                                    color: Theme.muted
+                                    font.pixelSize: 11
+                                    font.family: Theme.fontDisplay
+                                    wrapMode: Text.Wrap
                                 }
 
-                                StyledComboBox {
-                                    id: searchEngineCombo
-                                    model: ["bing", "baidu", "duckduckgo"]
-                                    currentIndex: model.indexOf(appSettings ? appSettings.webSearchEngine : "bing")
-                                    onActivated: if (appSettings) appSettings.webSearchEngine = model[currentIndex]
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "危险操作前弹窗确认"
+                                        color: Theme.text
+                                        font.pixelSize: 13
+                                        font.weight: Font.Medium
+                                        font.family: Theme.fontDisplay
+                                    }
+
+                                    Switch {
+                                        id: sandboxConfirmSwitch
+                                        checked: appSettings ? appSettings.agentSandboxConfirmDestructive : true
+                                        onToggled: function (on) {
+                                            if (appSettings)
+                                                appSettings.agentSandboxConfirmDestructive = on
+                                        }
+                                    }
+                                }
+
+                                Connections {
+                                    target: (typeof appSettings !== "undefined" && appSettings) ? appSettings : null
+                                    function onAgentSandboxConfirmDestructiveChanged() {
+                                        if (appSettings)
+                                            sandboxConfirmSwitch.checked = appSettings.agentSandboxConfirmDestructive
+                                    }
                                 }
                             }
                         }
+                    }
+
+                    // ────────────────────────────────────────
+                    //  Page 4: 网络设置
+                    // ────────────────────────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+                        visible: settingsPopup.currentPage === 4
 
                         SettingsCard {
                             cardTitle: "代理"
@@ -815,6 +1019,8 @@ Popup {
     }
 
     component FieldInput: TextField {
+        property bool isPassword: false
+        echoMode: isPassword ? TextInput.Password : TextInput.Normal
         Layout.fillWidth: true
         Layout.preferredHeight: 36
         color: Theme.text
@@ -1055,16 +1261,32 @@ Popup {
         }
     }
 
+    FileDialog {
+        id: skillImportDialog
+        title: "选择 Markdown 技能文件"
+        nameFilters: ["Markdown (*.md)", "所有文件 (*)"]
+        onAccepted: {
+            if (typeof cacheManager === "undefined" || !cacheManager)
+                return
+            var url = skillImportDialog.selectedFile
+            var s = url.toString()
+            if (s.indexOf("file://") === 0)
+                s = s.substring(7)
+            cacheManager.importSkillMarkdown(s)
+        }
+    }
+
     onOpened: {
         settingsPopup.forceActiveFocus()
         currentPage = 0
+        modelRefreshHint = ""
         if (appSettings) {
             cacheDirField.text = appSettings.cacheDir
             apiUrlField.text = appSettings.apiBaseUrl
+            apiKeyField.text = appSettings.apiKey
             modelCombo.model = appSettings.apiModelList
             modelCombo.currentIndex = modelCombo.model.indexOf(appSettings.apiModel)
             systemPromptArea.text = appSettings.systemPrompt
-            searchEngineCombo.currentIndex = searchEngineCombo.model.indexOf(appSettings.webSearchEngine)
             proxyField.text = appSettings.proxyUrl
         }
     }

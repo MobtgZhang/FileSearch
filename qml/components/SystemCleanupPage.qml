@@ -493,7 +493,10 @@ Rectangle {
 
                                     CheckBox {
                                         checked: modelData.selected
-                                        onCheckedChanged: CleanupContext.setCategorySelected(modelData.id, checked)
+                                        onCheckedChanged: {
+                                            if (modelData && modelData.selected !== checked)
+                                                CleanupContext.setCategorySelected(modelData.id, checked)
+                                        }
                                     }
 
                                     Text {
